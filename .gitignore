@@ -1,0 +1,9 @@
+.venv/
+kpm-data2/
+__pycache__/
+.ipynb_checkpoints/
+*.log
+newdataset/
+*.npy
+*.zip
+__MACOSX/
