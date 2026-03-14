@@ -4,6 +4,8 @@ __pycache__/
 .ipynb_checkpoints/
 *.log
 newdataset/
-*.npy
+X_spec_test.npy
+X_spec_train.npy
+X_spec_val.npy
 *.zip
 __MACOSX/
