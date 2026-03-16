@@ -1,0 +1,10 @@
+{
+  "clean": 0.955,
+  "n_samples": 200,
+  "jsma": 0.295,
+  "jsma_mean_l2": 11.790325164794922,
+  "jsma_mean_linf": 0.5534902215003967,
+  "boundary": 0.465,
+  "boundary_mean_l2": 8.930721282958984,
+  "boundary_mean_linf": 0.16685275733470917
+}
