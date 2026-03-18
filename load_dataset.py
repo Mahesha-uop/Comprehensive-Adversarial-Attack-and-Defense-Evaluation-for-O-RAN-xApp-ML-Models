@@ -1,7 +1,3 @@
-"""
-Data Loading & Preprocessing for O-RAN Adversarial ML Project
-Tailored to actual dataset from nextgwirelesslab.org/datasets
-"""
 
 import os
 import json
@@ -10,20 +6,15 @@ import numpy as np
 from PIL import Image
 from sklearn.model_selection import train_test_split
 
-# ============================================================================
-# CONFIGURATION
-# ============================================================================
+
 SPECTROGRAM_BASE_DIR = "newdataset"
 KPM_BASE_DIR = "kpm-data2"
 
-# Paper page 9: uplink SINR, bitrate, BLER, MCS
+
 KPM_FEATURE_KEYS = ['ul_snr', 'ul_bitrate', 'ul_bler', 'ul_mcs']
 KPM_WINDOWS = 15
 
 
-# ============================================================================
-# SPECTROGRAM LOADING — RGB, resized to 128x128
-# ============================================================================
 
 def load_spectrogram_dataset(base_dir, img_size=(128, 128)):
     """
@@ -49,9 +40,9 @@ def load_spectrogram_dataset(base_dir, img_size=(128, 128)):
 
         for img_path in pngs:
             try:
-                img = Image.open(img_path).convert('RGB')  # Keep RGB
+                img = Image.open(img_path).convert('RGB') 
                 img = img.resize(img_size, Image.BILINEAR)
-                img_array = np.array(img, dtype=np.float32) / 255.0  # (128,128,3)
+                img_array = np.array(img, dtype=np.float32) / 255.0  
                 X_list.append(img_array)
                 y_list.append(label)
             except Exception as e:
@@ -66,9 +57,6 @@ def load_spectrogram_dataset(base_dir, img_size=(128, 128)):
     return X, y
 
 
-# ============================================================================
-# KPM LOADING
-# ============================================================================
 
 def extract_kpm_from_json(filepath, feature_keys):
     """Extract UE-level KPM measurements from a single JSON file."""
@@ -147,9 +135,7 @@ def load_kpm_dataset(base_dir, feature_keys, window_size=KPM_WINDOWS):
     return X, y
 
 
-# ============================================================================
-# SPLIT & MAIN
-# ============================================================================
+
 
 def split_dataset(X, y):
     """80/10/10 stratified split."""
