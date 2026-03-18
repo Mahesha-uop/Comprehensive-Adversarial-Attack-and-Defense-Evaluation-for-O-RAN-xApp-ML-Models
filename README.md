@@ -1,6 +1,6 @@
 # Adversarial Attack & Defense Evaluation for O-RAN xApps
 
-Extends [Chiejina et al. (ACM WiSec 2024)](https://doi.org/10.1145/3643833.3656127) with 7 adversarial attacks and 2 defenses on O-RAN interference classification xApps (CNN for spectrograms, DNN for KPMs).
+Extends [Chiejina et al. (ACM WiSec 2024)](https://dl.acm.org/doi/abs/10.1145/3643833.3656119) with 7 adversarial attacks and 2 defenses on O-RAN interference classification xApps (CNN for spectrograms, DNN for KPMs).
 
 ## Setup
 
