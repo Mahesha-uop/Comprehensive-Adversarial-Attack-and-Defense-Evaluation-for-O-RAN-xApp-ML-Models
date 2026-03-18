@@ -1,15 +1,3 @@
-"""
-EDA Visualizations for Milestone Report
-========================================
-Generates all figures for the report:
-1. Sample spectrogram comparison (SOI vs CWI)
-2. Pixel intensity distributions (grayscale & RGB)
-3. KPM feature distributions (clean vs jammer)
-4. Class balance charts
-5. Attack comparison plots (all 7 attacks)
-6. Defense effectiveness comparison
-"""
-
 import os
 import glob
 import json
