@@ -28,14 +28,10 @@ Run in order:
 python load_dataset.py
 
 # 2. Base paper replication (FGSM, PGD, distillation, adversarial training)
-#    Uncomment run_full_pipeline() at bottom of file first
 python replicate_base_paper.py 
 
-# 3. Extended attacks (C&W, JSMA, DeepFool, AutoPGD, Boundary)
+# 3. Extended attacks 
 python extended_attacks.py
-
-# 4. Generate report figures
-python generate_figures.py
 ```
 
 Models and results checkpoint to `checkpoints/` and `extended_results/`. Re-running skips completed steps.
