@@ -45,7 +45,6 @@ Models and results checkpoint to `checkpoints/` and `extended_results/`. Re-runn
 | `extended_attacks.py` | 7-attack evaluation via IBM ART |
 | `test_representations.py` | Input representation comparison (grayscale vs RGB) |
 | `generate_figures.py` | All report figures |
-| `milestone_report.tex` | LaTeX report |
 
 ## Reference
 
