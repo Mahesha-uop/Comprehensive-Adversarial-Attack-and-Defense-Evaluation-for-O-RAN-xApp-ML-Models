@@ -1,7 +1,3 @@
-"""
-Quick test: Grayscale spectrograms at different resolutions
-Goal: See if grayscale can match RGB accuracy (~96%) at higher resolution
-"""
 
 import os
 import glob
