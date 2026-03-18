@@ -1,4 +1,3 @@
-
 import os
 import json
 import numpy as np
@@ -8,9 +7,7 @@ from tensorflow.keras import layers
 from tensorflow.keras.utils import to_categorical
 import matplotlib.pyplot as plt
 
-# ============================================================================
-# CONFIGURATION
-# ============================================================================
+
 
 np.random.seed(42)
 tf.random.set_seed(42)
@@ -28,17 +25,15 @@ DISTILLATION_ALPHA = 0.1
 
 ADV_TRAIN_EPSILON = 0.02
 
-# Checkpoint directory
+
 CKPT_DIR = "./checkpoints"
 os.makedirs(CKPT_DIR, exist_ok=True)
 
-# Attack batch size (to avoid OOM on 16GB RAM)
+
 ATTACK_BATCH_SIZE = 128
 
 
-# ============================================================================
-# CHECKPOINT HELPERS
-# ============================================================================
+
 
 def save_model(model, name):
     """Save a Keras model."""
@@ -86,9 +81,6 @@ def results_exist(name):
     return os.path.exists(os.path.join(CKPT_DIR, f"{name}.json"))
 
 
-# ============================================================================
-# 1. MODEL ARCHITECTURES
-# ============================================================================
 
 def build_cnn_model(input_shape=(128, 128, 3), num_classes=2):
     """CNN for InterClass-Spec xApp (Table 2). RGB input."""
@@ -119,7 +111,7 @@ def build_cnn_logits(input_shape=(128, 128, 3), num_classes=2):
         layers.Conv2D(32, (3, 3), activation='relu'),
         layers.Flatten(),
         layers.Dense(32, activation='relu'),
-        layers.Dense(num_classes),  # No softmax
+        layers.Dense(num_classes), 
     ])
     return model
 
@@ -154,9 +146,6 @@ def verify_model_params():
     print(f"DNN Match: {'YES' if dnn.count_params() == 6546 else 'NO'}")
 
 
-# ============================================================================
-# 2. DATA LOADING
-# ============================================================================
 
 def load_spectrogram_splits():
     X_train = np.load("X_spec_train.npy")
@@ -180,9 +169,6 @@ def load_kpm_splits():
     return X_train, X_val, X_test, y_train, y_val, y_test
 
 
-# ============================================================================
-# 3. TRAINING
-# ============================================================================
 
 def train_model(model, X_train, y_train, X_val, y_val, epochs=EPOCHS):
     y_train_cat = to_categorical(y_train, 2)
@@ -203,15 +189,24 @@ def train_model(model, X_train, y_train, X_val, y_val, epochs=EPOCHS):
 
 
 def evaluate_model(model, X_test, y_test, label="Model"):
+    """Evaluate accuracy. Uses manual prediction to avoid compile() requirement."""
     y_test_cat = to_categorical(y_test, 2)
-    loss, acc = model.evaluate(X_test, y_test_cat, verbose=0)
+   
+    preds_list = []
+    bs = 256
+    for i in range(0, len(X_test), bs):
+        batch = tf.convert_to_tensor(X_test[i:i+bs], dtype=tf.float32)
+        preds_list.append(model(batch, training=False).numpy())
+    preds_np = np.concatenate(preds_list, axis=0)
+    y_pred = np.argmax(preds_np, axis=1)
+    acc = float(np.mean(y_pred == y_test))
+    loss_per_sample = -np.sum(y_test_cat * np.log(np.clip(preds_np, 1e-10, 1.0)), axis=1)
+    loss = float(np.mean(loss_per_sample))
     print(f"  {label} — Acc: {acc*100:.2f}%, Loss: {loss:.4f}")
     return acc
 
 
-# ============================================================================
-# 4. ADVERSARIAL ATTACKS (batched to avoid OOM)
-# ============================================================================
+
 
 def fgsm_attack_batched(model, X, y, epsilon, batch_size=ATTACK_BATCH_SIZE):
     """FGSM targeted attack, processed in batches."""
@@ -242,7 +237,7 @@ def pgd_attack_batched(model, X, y, epsilon, steps=PGD_STEPS,
     Adaptive step size: step_size = 2*epsilon/steps (standard practice).
     This ensures the full epsilon budget can be used.
     """
-    step_size = 2.0 * epsilon / steps  # Adaptive step size
+    step_size = 2.0 * epsilon / steps  
     X_adv_list = []
     n = len(X)
 
@@ -294,9 +289,7 @@ def evaluate_attacks(model, X_test, y_test, epsilon_values, model_name="Model"):
     return results
 
 
-# ============================================================================
-# 5. DISTILLATION DEFENSE
-# ============================================================================
+
 
 def train_teacher(logits_builder, X_train, y_train, X_val, y_val,
                   temperature=TEACHER_TEMPERATURE):
@@ -376,49 +369,80 @@ def distill_student(teacher, logits_builder, X_train, y_train, X_val, y_val,
             print(f"  Student Epoch {epoch+1}/{EPOCHS} — "
                   f"Loss: {epoch_loss/n:.4f}")
 
-    # Wrap with softmax for inference
-    class DistilledModel(keras.Model):
-        def __init__(self, base):
-            super().__init__()
-            self.base = base
-        def call(self, x, training=False):
-            return tf.nn.softmax(self.base(x, training=training))
-
-    student_inf = DistilledModel(student)
-    student_inf(X_train[:1])  # build
+ 
+    student_inf = keras.Sequential([student, layers.Softmax()])
+    student_inf(X_train[:1])  # trigger build by calling once
     return student, student_inf
 
 
-# ============================================================================
-# 6. ADVERSARIAL TRAINING
-# ============================================================================
+
 
 def adversarial_training(model_builder, X_train, y_train, X_val, y_val,
                          adv_epsilon=ADV_TRAIN_EPSILON):
+    """
+    Memory-efficient adversarial training.
+    Instead of holding 3 copies of training data in RAM (original + FGSM + PGD = ~12GB),
+    we generate adversarial examples in batches and save to disk, then train from disk.
+    Uses only FGSM augmentation with 50% subsample to fit in 16GB RAM.
+    """
     print("  Training temp model for adversarial generation...")
-    temp_model = model_builder()
-    train_model(temp_model, X_train, y_train, X_val, y_val, epochs=EPOCHS)
 
-    print("  Generating FGSM adversarial examples...")
-    X_adv_fgsm = fgsm_attack_batched(temp_model, X_train, y_train, adv_epsilon)
-    print("  Generating PGD adversarial examples...")
-    X_adv_pgd = pgd_attack_batched(temp_model, X_train, y_train, adv_epsilon)
+    
+    temp_ckpt = os.path.join(CKPT_DIR, "advtrain_temp.keras")
+    if os.path.exists(temp_ckpt):
+        print("  Loading saved temp model...")
+        temp_model = keras.models.load_model(temp_ckpt)
+    else:
+        temp_model = model_builder()
+        train_model(temp_model, X_train, y_train, X_val, y_val, epochs=EPOCHS)
+        temp_model.save(temp_ckpt)
+        print(f"  Saved temp model to {temp_ckpt}")
 
-    X_aug = np.concatenate([X_train, X_adv_fgsm, X_adv_pgd], axis=0)
-    y_aug = np.concatenate([y_train, y_train, y_train], axis=0)
+    
+    print("  Generating FGSM adversarial examples (batched, saving to disk)...")
+    adv_path = os.path.join(CKPT_DIR, "X_adv_fgsm.npy")
+    if not os.path.exists(adv_path):
+        X_adv_fgsm = fgsm_attack_batched(temp_model, X_train, y_train, adv_epsilon)
+        np.save(adv_path, X_adv_fgsm)
+        del X_adv_fgsm
+        print(f"  Saved adversarial examples to {adv_path}")
+    else:
+        print(f"  Adversarial examples already at {adv_path}")
+
+ 
+    del temp_model
+    tf.keras.backend.clear_session()
+
+    # Load adversarial examples — use 50% subsample to fit in 16GB RAM
+    # (original 9037 + 4518 adv = ~13500 samples instead of 18074)
+    print("  Building augmented dataset (50% adversarial subsample for memory)...")
+    X_adv_fgsm = np.load(adv_path)
+    n_adv = len(X_adv_fgsm)
+    subsample_idx = np.random.choice(n_adv, size=n_adv // 2, replace=False)
+    X_adv_sub = X_adv_fgsm[subsample_idx]
+    y_adv_sub = y_train[subsample_idx]
+    del X_adv_fgsm  # Free full set
+
+    X_aug = np.concatenate([X_train, X_adv_sub], axis=0)
+    y_aug = np.concatenate([y_train, y_adv_sub], axis=0)
+    del X_adv_sub
+
     idx = np.random.permutation(len(X_aug))
     X_aug, y_aug = X_aug[idx], y_aug[idx]
-    print(f"  Augmented: {len(X_aug)} samples")
+    print(f"  Augmented: {len(X_aug)} samples (original + 50% FGSM)")
 
     print("  Training robust model...")
     robust = model_builder()
     train_model(robust, X_aug, y_aug, X_val, y_val, epochs=EPOCHS)
+
+  
+    for p in [adv_path, temp_ckpt]:
+        if os.path.exists(p):
+            os.remove(p)
+
     return robust
 
 
-# ============================================================================
-# 7. PLOTTING
-# ============================================================================
 
 def plot_accuracy_vs_epsilon(results_clean, results_distill, results_advtrain,
                              model_name="Model", save_path=None):
@@ -454,9 +478,6 @@ def plot_accuracy_vs_epsilon(results_clean, results_distill, results_advtrain,
     plt.close()
 
 
-# ============================================================================
-# 8. MAIN PIPELINE WITH CHECKPOINTS
-# ============================================================================
 
 def run_cnn_pipeline():
     """CNN pipeline with checkpoints at each step."""
@@ -467,7 +488,7 @@ def run_cnn_pipeline():
     print("\n[1] Loading spectrograms...")
     X_tr, X_v, X_te, y_tr, y_v, y_te = load_spectrogram_splits()
 
-    # --- Step 2: Baseline CNN ---
+
     print("\n[2] Training baseline CNN...")
     cnn = load_model_ckpt("cnn_baseline")
     if cnn is None:
@@ -477,24 +498,22 @@ def run_cnn_pipeline():
     acc = evaluate_model(cnn, X_te, y_te, "CNN Baseline")
     print(f"  Expected ~98%, Got {acc*100:.1f}%")
 
-    # --- Step 3: Attack evaluation ---
     print("\n[3] Evaluating attacks on CNN...")
     cnn_clean = load_results("cnn_attack_results")
     if cnn_clean is None:
         cnn_clean = evaluate_attacks(cnn, X_te, y_te, EPSILON_VALUES, "CNN")
         save_results(cnn_clean, "cnn_attack_results")
 
-    # --- Step 4: Distillation ---
+
     print("\n[4] Distillation defense for CNN...")
 
-    # 4a: Teacher
     cnn_teacher = load_model_ckpt("cnn_teacher")
     if cnn_teacher is None:
         print("  Training teacher (T=20)...")
         cnn_teacher = train_teacher(build_cnn_logits, X_tr, y_tr, X_v, y_v)
         save_model(cnn_teacher, "cnn_teacher")
 
-    # 4b: Student
+
     cnn_student = load_model_ckpt("cnn_student")
     if cnn_student is None:
         print("  Distilling student...")
@@ -503,25 +522,29 @@ def run_cnn_pipeline():
         save_model(cnn_student_raw, "cnn_student")
         cnn_student = cnn_student_raw
 
-    # Build inference wrapper
-    class DistilledModel(keras.Model):
-        def __init__(self, base):
-            super().__init__()
-            self.base = base
-        def call(self, x, training=False):
-            return tf.nn.softmax(self.base(x, training=training))
+  
+    cnn_dist_inf = keras.Sequential([cnn_student, layers.Softmax()])
+    cnn_dist_inf(X_te[:1])  
 
-    cnn_dist_inf = DistilledModel(cnn_student)
-    cnn_dist_inf(X_te[:1])
+   
+    old_distill_path = os.path.join(CKPT_DIR, "cnn_distill_results.json")
+    if os.path.exists(old_distill_path):
+      
+        old_res = load_results("cnn_distill_results")
+        if old_res and len(set(old_res['fgsm'])) == 1:
+            print("  Detected broken distill results (no attack effect), re-evaluating...")
+            os.remove(old_distill_path)
+            old_res = None
+        cnn_distill = old_res
+    else:
+        cnn_distill = None
 
-    # 4c: Evaluate distilled under attacks
-    cnn_distill = load_results("cnn_distill_results")
     if cnn_distill is None:
         print("  Evaluating distilled CNN under attacks...")
         cnn_distill = evaluate_attacks(cnn_dist_inf, X_te, y_te, EPSILON_VALUES, "CNN-Dist")
         save_results(cnn_distill, "cnn_distill_results")
 
-    # --- Step 5: Adversarial training ---
+    
     print("\n[5] Adversarial training for CNN...")
     cnn_adv = load_model_ckpt("cnn_advtrain")
     if cnn_adv is None:
@@ -534,7 +557,7 @@ def run_cnn_pipeline():
         cnn_advtrain = evaluate_attacks(cnn_adv, X_te, y_te, EPSILON_VALUES, "CNN-AdvT")
         save_results(cnn_advtrain, "cnn_advtrain_results")
 
-    # --- Step 6: Plot ---
+
     print("\n[6] Generating Figure 7...")
     plot_accuracy_vs_epsilon(cnn_clean, cnn_distill, cnn_advtrain,
                             "InterClass-Spec xApp (CNN)", "figure7_cnn.png")
@@ -551,7 +574,7 @@ def run_dnn_pipeline():
     print("\n[1] Loading KPMs...")
     X_tr, X_v, X_te, y_tr, y_v, y_te = load_kpm_splits()
 
-    # --- Step 2: Baseline DNN ---
+
     print("\n[2] Training baseline DNN...")
     dnn = load_model_ckpt("dnn_baseline")
     if dnn is None:
@@ -561,14 +584,13 @@ def run_dnn_pipeline():
     acc = evaluate_model(dnn, X_te, y_te, "DNN Baseline")
     print(f"  Expected ~97.9%, Got {acc*100:.1f}%")
 
-    # --- Step 3: Attack evaluation ---
     print("\n[3] Evaluating attacks on DNN...")
     dnn_clean = load_results("dnn_attack_results")
     if dnn_clean is None:
         dnn_clean = evaluate_attacks(dnn, X_te, y_te, EPSILON_VALUES, "DNN")
         save_results(dnn_clean, "dnn_attack_results")
 
-    # --- Step 4: Distillation ---
+
     print("\n[4] Distillation defense for DNN...")
 
     dnn_teacher = load_model_ckpt("dnn_teacher")
@@ -585,23 +607,22 @@ def run_dnn_pipeline():
         save_model(dnn_student_raw, "dnn_student")
         dnn_student = dnn_student_raw
 
-    class DistilledModel(keras.Model):
-        def __init__(self, base):
-            super().__init__()
-            self.base = base
-        def call(self, x, training=False):
-            return tf.nn.softmax(self.base(x, training=training))
-
-    dnn_dist_inf = DistilledModel(dnn_student)
-    dnn_dist_inf(X_te[:1])
+    dnn_dist_inf = keras.Sequential([dnn_student, layers.Softmax()])
+    dnn_dist_inf(X_te[:1])  
 
     dnn_distill = load_results("dnn_distill_results")
+    if dnn_distill is not None:
+        
+        if len(set(dnn_distill['fgsm'])) == 1:
+            print("  Detected broken distill results, re-evaluating...")
+            os.remove(os.path.join(CKPT_DIR, "dnn_distill_results.json"))
+            dnn_distill = None
+
     if dnn_distill is None:
         print("  Evaluating distilled DNN under attacks...")
         dnn_distill = evaluate_attacks(dnn_dist_inf, X_te, y_te, EPSILON_VALUES, "DNN-Dist")
         save_results(dnn_distill, "dnn_distill_results")
 
-    # --- Step 5: Adversarial training ---
     print("\n[5] Adversarial training for DNN...")
     dnn_adv = load_model_ckpt("dnn_advtrain")
     if dnn_adv is None:
@@ -614,7 +635,7 @@ def run_dnn_pipeline():
         dnn_advtrain = evaluate_attacks(dnn_adv, X_te, y_te, EPSILON_VALUES, "DNN-AdvT")
         save_results(dnn_advtrain, "dnn_advtrain_results")
 
-    # --- Step 6: Plot ---
+ 
     print("\n[6] Generating Figure 8...")
     plot_accuracy_vs_epsilon(dnn_clean, dnn_distill, dnn_advtrain,
                             "InterClass-KPM xApp (DNN)", "figure8_dnn.png")
@@ -631,7 +652,7 @@ def run_full_pipeline():
     cnn_clean, cnn_distill, cnn_advtrain = run_cnn_pipeline()
     dnn_clean, dnn_distill, dnn_advtrain = run_dnn_pipeline()
 
-    # Summary
+
     print("\n" + "=" * 70)
     print("SUMMARY (at eps=0.1)")
     print("=" * 70)
@@ -649,3 +670,7 @@ def run_full_pipeline():
 
 if __name__ == "__main__":
     run_full_pipeline()
+
+
+# # if __name__ == "__main__":
+# #     run_full_pipeline()
