@@ -1,14 +1,4 @@
-"""
-Extended Adversarial Attacks on O-RAN xApp Models
-=================================================
-Attacks: C&W, JSMA, DeepFool, AutoAttack, Boundary Attack
-Models: CNN (spectrograms) + DNN (KPMs)
 
-Uses IBM ART (Adversarial Robustness Toolbox) for all attacks.
-Install: pip install adversarial-robustness-toolbox
-
-Loads baseline models from checkpoints saved by replicate_base_paper.py
-"""
 
 import os
 import json
