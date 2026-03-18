@@ -29,10 +29,10 @@ python load_dataset.py
 
 # 2. Base paper replication (FGSM, PGD, distillation, adversarial training)
 #    Uncomment run_full_pipeline() at bottom of file first
-nohup python -u replicate_base_paper.py > output.log 2>&1 &
+python replicate_base_paper.py 
 
 # 3. Extended attacks (C&W, JSMA, DeepFool, AutoPGD, Boundary)
-nohup python -u extended_attacks.py > extended.log 2>&1 &
+python extended_attacks.py
 
 # 4. Generate report figures
 python generate_figures.py
