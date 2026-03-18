@@ -1,4 +1,4 @@
-# Adversarial Attack & Defense Evaluation for O-RAN xApps
+# dversarial Attacks and Robust Defenses for ML Intelligence in O-RAN Cellular Networks
 
 Extends [Chiejina et al. (ACM WiSec 2024)](https://dl.acm.org/doi/abs/10.1145/3643833.3656119) with 7 adversarial attacks and 2 defenses on O-RAN interference classification xApps (CNN for spectrograms, DNN for KPMs).
 
