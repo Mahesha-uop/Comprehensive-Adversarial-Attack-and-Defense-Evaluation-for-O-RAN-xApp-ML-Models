@@ -1,16 +1,3 @@
-"""
-Replication of: Chiejina et al., ACM WiSec 2024
-"System-level Analysis of Adversarial Attacks and Defenses
-on Intelligence in O-RAN based Cellular Networks"
-
-Features:
-- Saves models and results after each major step
-- Can resume from last checkpoint if interrupted
-- Batched attack evaluation to reduce memory usage
-- Adaptive PGD step size (step_size = epsilon/steps)
-
-Prerequisites: Run load_dataset.py first to generate .npy files.
-"""
 
 import os
 import json
