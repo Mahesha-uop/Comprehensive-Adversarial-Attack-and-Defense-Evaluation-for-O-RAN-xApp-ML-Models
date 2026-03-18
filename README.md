@@ -15,8 +15,8 @@ pip install tensorflow numpy matplotlib scikit-learn pillow adversarial-robustne
 Download from [nextgwirelesslab.org/datasets](https://www.nextgwirelesslab.org/datasets) and place files as:
 
 ```
-data/spectrograms/{soi,cwi,ci}/*.png
-data/kpms/{clean1..4,jammer1..6}.json
+newdataset/{soi,cwi,ci}/*.png
+kpm-data2/{clean1..4,jammer1..6}.json
 ```
 
 ## Execution
