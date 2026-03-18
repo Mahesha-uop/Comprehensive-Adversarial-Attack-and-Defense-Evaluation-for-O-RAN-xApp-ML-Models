@@ -12,7 +12,7 @@ np.random.seed(42)
 tf.random.set_seed(42)
 
 SPEC_DIR = "./newdataset"
-EPOCHS = 30  # Fewer epochs for quick test
+EPOCHS = 30 
 BATCH_SIZE = 32
 
 
